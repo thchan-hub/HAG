@@ -1,84 +1,74 @@
 import os
-import time
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
 
 # --- Configurations ---
-# Safely reads from GitHub Secrets. If running locally, replace the right side with your actual key string.
-THINGSPEAK_WRITE_KEY = os.environ.get("THINGSPEAK_WRITE_KEY", "YOUR_THINGSPEAK_WRITE_API_KEY")
+THINGSPEAK_WRITE_KEY = os.environ.get("THINGSPEAK_WRITE_KEY")
 ACTIVESG_URL = "https://activesg.gov.sg"
 FACILITY_NAME = "Hougang ActiveSG Gym"
 
 def get_hougang_capacity():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
-    
-    driver = webdriver.Chrome(options=chrome_options)
-    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-    })
+    # Disguise the script as a normal browser header
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     
     try:
-        print("Navigating to ActiveSG...")
-        driver.get(ACTIVESG_URL)
+        print("Fetching data from ActiveSG...")
+        response = requests.get(ACTIVESG_URL, headers=headers, timeout=20)
         
-        print("Waiting for dynamic elements to load...")
-        WebDriverWait(driver, 25).until(
-            EC.presence_of_element_located((By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]"))
-        )
+        if response.status_code != 200:
+            print(f"Failed to fetch page. HTTP Status: {response.status_code}")
+            return None
+            
+        soup = BeautifulSoup(response.text, "html.parser")
         
-        hougang_element = driver.find_element(By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]/ancestor::*[self::li or self::div]")
-        text_content = hougang_element.text.strip()
-        print(f"Match Found! Raw Data:\n{text_content}")
+        # Search the raw page elements for the facility text string
+        elements = soup.find_all(text=lambda text: text and FACILITY_NAME in text)
         
-        if "Closed" in text_content:
-            return 0
-        
-        lines = text_content.split('\n')
-        for line in lines:
-            if "%" in line:
-                digits = [int(s) for s in line.replace('%', ' ').split() if s.isdigit()]
-                if digits:
-                    return digits[0] # Return the integer directly
-
-        print("Could not parse capacity numbers from text.")
+        for element in elements:
+            # Navigate to the nearest container parent holding the capacity values
+            parent = element.find_parent(["li", "div"])
+            if parent:
+                text_content = parent.get_text(separator=" ").strip()
+                print(f"Match Found! Raw Data:\n{text_content}")
+                
+                if "Closed" in text_content:
+                    return 0
+                    
+                # Look for the percentage number string
+                for word in text_content.replace('%', ' ').split():
+                    if word.isdigit():
+                        return int(word)
+                        
+        print(f"Could not find data for {FACILITY_NAME}")
         return None
         
     except Exception as e:
-        print(f"Scraper timed out or failed: {e}")
+        print(f"Request failed: {e}")
         return None
-    finally:
-        driver.quit()
 
 def push_to_thingspeak(value):
-    # Properly formatted URL query parameters to avoid string replacement injection errors
     url = "https://thingspeak.com"
     payload = {
         'api_key': THINGSPEAK_WRITE_KEY,
         'field1': value
     }
     
-    print(f"Sending payload to ThingSpeak...")
+    print(f"Sending {value}% payload to ThingSpeak...")
     response = requests.get(url, params=payload)
     
     if response.status_code == 200 and response.text != "0":
-        print(f"Successfully sent {value}% capacity to ThingSpeak! Entry ID: {response.text}")
+        print(f"Successfully sent to ThingSpeak! Entry ID: {response.text}")
     elif response.text == "0":
-        print("ThingSpeak rejected the update. Double-check your API Key or wait 15+ seconds between updates.")
+        print("ThingSpeak rejected the update. Check your API key or wait 15 seconds.")
     else:
         print(f"Failed to send data. Status code: {response.status_code}")
 
 if __name__ == "__main__":
-    capacity = get_hougang_capacity()
-    if capacity is not None:
-        push_to_thingspeak(capacity)
+    if not THINGSPEAK_WRITE_KEY or THINGSPEAK_WRITE_KEY == "YOUR_THINGSPEAK_WRITE_API_KEY":
+        print("Error: THINGSPEAK_WRITE_KEY secret is not set in GitHub Settings.")
+    else:
+        capacity = get_hougang_capacity()
+        if capacity is not None:
+            push_to_thingspeak(capacity)
