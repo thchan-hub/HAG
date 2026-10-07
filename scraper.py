@@ -3,8 +3,6 @@ import datetime
 import os
 import requests
 from playwright.sync_api import sync_playwright
-# 💡 Correct module reference format to avoid 'module object is not callable' error:
-from playwright_stealth.playwright_stealth import stealth_sync
 
 TARGET_GYM = "Hougang ActiveSG Gym"
 URL = "https://activesg.gov.sg"
@@ -43,24 +41,24 @@ def log_capacity():
     # Launch automated background browser environment
     with sync_playwright() as p:
         try:
-            # Added structural arguments to blend in with standard desktop user browser signatures
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--use-gl=desktop"
-                ]
-            )
+            # Emulate standard Google Chrome launch parameters
+            browser = p.chromium.launch(headless=True)
             
             context = browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 720}
+                viewport={"width": 1280, "height": 720},
+                locale="en-SG",
+                timezone_id="Asia/Singapore"
             )
             
             page = context.new_page()
             
-            # 💡 Use stealth_sync to successfully strip out automated system properties
-            stealth_sync(page)
+            # 💡 Native Stealth Injection: Overrides the driver parameter to hide automation signature
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
             
             print("Navigating to ActiveSG...")
             page.goto(URL, timeout=45000)
@@ -92,7 +90,7 @@ def log_capacity():
                         if "%" in check_text:
                             digits = [int(s) for s in check_text.replace('%', ' ').split() if s.isdigit()]
                             if digits:
-                                capacity_num = digits
+                                capacity_num = digits[0] # Grab the specific matched capacity value integer
                                 capacity_str = f"{capacity_num}%"
                                 break
                         elif "Closed" in check_text:
