@@ -46,33 +46,39 @@ def get_hougang_capacity():
         # Grab the specific container card holding Hougang's data
         hougang_element = driver.find_element(By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]/ancestor::*[self::li or self::div]")
         text_content = hougang_element.text.strip()
-        print(f"Match Found! Raw Data: {text_content}")
+        print(f"Match Found! Raw Data:\n{text_content}")
         
         if "Closed" in text_content:
             return 0
         
-        # Pull number sequence before the % sign (e.g., "72% full" -> 72)
-        numbers = [int(s) for s in text_content.replace('%', ' ').split() if s.isdigit()]
-        if numbers:
-            return numbers[0]
-            
+        # Split string by newlines to inspect the lines (e.g., Line 1: Name, Line 2: "49% full")
+        lines = text_content.split('\n')
+        for line in lines:
+            if "%" in line:
+                # Isolate the digits directly attached to the % sign
+                digits = [int(s) for s in line.replace('%', ' ').split() if s.isdigit()]
+                if digits:
+                    return digits[0] # Return the actual 49% value explicitly
+
         print("Could not parse capacity numbers from text.")
         return None
-        
+
+             
     except Exception as e:
         print(f"Scraper timed out or failed: {e}")
         return None
     finally:
         driver.quit()
 
-
 def push_to_thingspeak(value):
-    url = f"https://thingspeak.com{THINGSPEAK_WRITE_KEY}&field1={value}"
+    # Ensure there is a proper slash after ://thingspeak.com and the update parameter is correct
+    url = f"https://://thingspeak.com/update?api_key={THINGSPEAK_WRITE_KEY}&field1={value}"
+    print(f"Sending payload to ThingSpeak...")
     response = requests.get(url)
     if response.status_code == 200:
         print(f"Successfully sent {value}% capacity to ThingSpeak!")
     else:
-        print("Failed to send data to ThingSpeak.")
+        print(f"Failed to send data. Status code: {response.status_code}")
 
 if __name__ == "__main__":
     capacity = get_hougang_capacity()
