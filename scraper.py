@@ -20,27 +20,38 @@ def get_hougang_capacity():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     
+    # 💡 Crucial additions to bypass Cloudflare bot detection:
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    
     driver = webdriver.Chrome(options=chrome_options)
     
+    # Overwrite the navigator.webdriver property to appear completely organic
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+    })
+    
     try:
+        print("Navigating to ActiveSG...")
         driver.get(ACTIVESG_URL)
         
-        # 1. Force Selenium to wait up to 20 seconds for Hougang text to actively render
-        print("Waiting for dynamic content to load...")
-        WebDriverWait(driver, 20).until(
+        # Force Selenium to wait up to 25 seconds for Hougang text to actively render
+        print("Waiting for dynamic elements to load...")
+        WebDriverWait(driver, 25).until(
             EC.presence_of_element_located((By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]"))
         )
         
-        # 2. Grab the specific container card holding Hougang's data using XPath
-        # This matches the element containing the text and steps up to its parent block
-        hougang_element = driver.find_element(By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]/ancestor::*[self::li or self::div][1]")
+        # Grab the specific container card holding Hougang's data
+        hougang_element = driver.find_element(By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]/ancestor::*[self::li or self::div]")
         text_content = hougang_element.text.strip()
         print(f"Match Found! Raw Data: {text_content}")
         
         if "Closed" in text_content:
             return 0
         
-        # 3. Pull numbers sequence before the % sign (e.g., "72% full" -> 72)
+        # Pull number sequence before the % sign (e.g., "72% full" -> 72)
         numbers = [int(s) for s in text_content.replace('%', ' ').split() if s.isdigit()]
         if numbers:
             return numbers[0]
@@ -53,6 +64,7 @@ def get_hougang_capacity():
         return None
     finally:
         driver.quit()
+
 
 def push_to_thingspeak(value):
     url = f"https://thingspeak.com{THINGSPEAK_WRITE_KEY}&field1={value}"
