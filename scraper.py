@@ -3,7 +3,7 @@ import datetime
 import os
 import requests
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync  # 💡 Added for anti-bot evasion
+from playwright_stealth import stealth  # 💡 Corrected native stealth module import
 
 TARGET_GYM = "Hougang ActiveSG Gym"
 URL = "https://activesg.gov.sg"
@@ -42,7 +42,7 @@ def log_capacity():
     # Launch automated background browser environment
     with sync_playwright() as p:
         try:
-            # 💡 Added args to blend in with real Linux desktop users
+            # Added structural arguments to blend in with standard desktop user browser signatures
             browser = p.chromium.launch(
                 headless=True,
                 args=[
@@ -52,20 +52,20 @@ def log_capacity():
             )
             
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720}
             )
             
             page = context.new_page()
             
-            # 💡 Apply stealth hooks to strip automation footprints from Javascript variables
-            stealth_sync(page)
+            # 💡 Correct invocation format to apply stealth hooks seamlessly
+            stealth(page)
             
             print("Navigating to ActiveSG...")
             page.goto(URL, timeout=45000)
             
-            print("Waiting for human-like verification delay...")
-            page.wait_for_timeout(10000) # Increased to 10 seconds to allow the challenge validation to clear
+            print("Waiting for dynamic crowd cards to populate...")
+            page.wait_for_timeout(10000) # Gives Cloudflare verification a 10s window to transparently pass
             
             # Extract the raw rendered text content from the browser viewport
             body_text = page.locator("body").inner_text()
