@@ -1,9 +1,9 @@
 import time
 import datetime
 import os
-import re
 import requests
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync  # 💡 Added for anti-bot evasion
 
 TARGET_GYM = "Hougang ActiveSG Gym"
 URL = "https://activesg.gov.sg"
@@ -42,33 +42,50 @@ def log_capacity():
     # Launch automated background browser environment
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            # 💡 Added args to blend in with real Linux desktop users
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--use-gl=desktop"
+                ]
+            )
             
-            # Navigate to the page and wait for full hydration to complete
-            page.goto(URL, timeout=30000)
-            page.wait_for_timeout(7000) # Increased to 7 seconds to let heavy text load completely
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 720}
+            )
+            
+            page = context.new_page()
+            
+            # 💡 Apply stealth hooks to strip automation footprints from Javascript variables
+            stealth_sync(page)
+            
+            print("Navigating to ActiveSG...")
+            page.goto(URL, timeout=45000)
+            
+            print("Waiting for human-like verification delay...")
+            page.wait_for_timeout(10000) # Increased to 10 seconds to allow the challenge validation to clear
             
             # Extract the raw rendered text content from the browser viewport
             body_text = page.locator("body").inner_text()
             browser.close()
             
-            # 💡 DEBUG: Split text into clean lines to inspect in the GitHub Action logs
+            # Split text into clean lines to inspect in the GitHub Action logs
             lines = [line.strip() for line in body_text.split('\n') if line.strip()]
             print("--- BEGIN PAGE SNAPSHOT LOG ---")
-            for idx, line in enumerate(lines[:100]): # Print the first 100 loaded text fragments
+            for idx, line in enumerate(lines[:100]):
                 print(f"[{idx}] {line}")
             print("--- END PAGE SNAPSHOT LOG ---")
             
             capacity_num = None
             capacity_str = "N/A"
             
-            # 💡 Iterative Matching Logic: Locate the gym name line and search adjacent rows
+            # Iterative Matching Logic: Locate the gym name line and search adjacent rows
             for i, line in enumerate(lines):
                 if "Hougang" in line and "Gym" in line:
                     print(f"Target found at line block [{i}]: {line}")
                     
-                    # Look at this line and the next 2 lines down for the percentage indicator
                     for search_idx in range(i, min(i + 3, len(lines))):
                         check_text = lines[search_idx]
                         if "%" in check_text:
