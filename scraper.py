@@ -1,4 +1,4 @@
-name: Log ActiveSG Gym Crowd (Playwright)
+name: Hougang ActiveSG Gym Crowd (Playwright)
 
 on:
   schedule:
