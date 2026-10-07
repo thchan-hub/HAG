@@ -11,6 +11,9 @@ THINGSPEAK_WRITE_KEY = "YOUR_THINGSPEAK_WRITE_API_KEY"
 ACTIVESG_URL = "https://activesg.gov.sg/gym-pool-crowd"
 FACILITY_NAME = "Hougang ActiveSG Gym"
 
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 def get_hougang_capacity():
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
@@ -21,31 +24,32 @@ def get_hougang_capacity():
     
     try:
         driver.get(ACTIVESG_URL)
-        time.sleep(7)  # Increased slightly to give the elements ample time to populate
         
-        # Pull all list items on the page directly
-        elements = driver.find_elements(By.TAG_NAME, "li")
+        # 1. Force Selenium to wait up to 20 seconds for Hougang text to actively render
+        print("Waiting for dynamic content to load...")
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]"))
+        )
         
-        for element in elements:
-            text_content = element.text.strip()
+        # 2. Grab the specific container card holding Hougang's data using XPath
+        # This matches the element containing the text and steps up to its parent block
+        hougang_element = driver.find_element(By.XPATH, f"//*[contains(text(), '{FACILITY_NAME}')]/ancestor::*[self::li or self::div][1]")
+        text_content = hougang_element.text.strip()
+        print(f"Match Found! Raw Data: {text_content}")
+        
+        if "Closed" in text_content:
+            return 0
+        
+        # 3. Pull numbers sequence before the % sign (e.g., "72% full" -> 72)
+        numbers = [int(s) for s in text_content.replace('%', ' ').split() if s.isdigit()]
+        if numbers:
+            return numbers[0]
             
-            # Look for our facility name in the text string
-            if FACILITY_NAME in text_content:
-                print(f"Match Found! Raw Data: {text_content}")
-                
-                if "Closed" in text_content:
-                    return 0
-                
-                # Extracts the number sequence before the % sign (e.g., "72% full" -> 72)
-                numbers = [int(s) for s in text_content.replace('%', ' ').split() if s.isdigit()]
-                if numbers:
-                    return numbers[0]
-                    
-        print(f"Could not find a list item containing: {FACILITY_NAME}")
+        print("Could not parse capacity numbers from text.")
         return None
         
     except Exception as e:
-        print(f"Error scraping data: {e}")
+        print(f"Scraper timed out or failed: {e}")
         return None
     finally:
         driver.quit()
