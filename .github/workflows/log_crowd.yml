@@ -24,7 +24,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # 🚀 Crucial step: Install Playwright browsers and system dependencies in the Linux VM
+    # Install Playwright browsers and system dependencies in the Linux VM
     - name: Install Playwright Browsers
       run: |
         pip install playwright
@@ -33,4 +33,5 @@ jobs:
     - name: Run Playwright Web Scraper
       env:
         THINGSPEAK_WRITE_KEY: ${{ secrets.THINGSPEAK_WRITE_KEY }}
+        TZ: Asia/Singapore  # 💡 This forces Python's datetime to use Singapore Time
       run: python scraper.py
