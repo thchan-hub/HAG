@@ -1,10 +1,10 @@
-name: Log ActiveSG Gym Crowd (Playwright)
+name: Log ActiveSG Gym Crowd (Direct API Data)
 
 on:
   schedule:
     # Runs every 10 minutes from 7:00 AM to 10:00 PM Singapore Time (00:00 to 14:00 UTC)
     - cron: '*/10 0-14 * * *'
-  workflow_dispatch: # Allows you to test it manually anytime
+  workflow_dispatch: # Allows manual verification tests anytime
 
 jobs:
   scrape-and-log:
@@ -24,14 +24,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # Install Playwright browsers and system dependencies in the Linux VM
-    - name: Install Playwright Browsers
-      run: |
-        pip install playwright
-        playwright install chromium --with-deps
-
-    - name: Run Playwright Web Scraper
+    - name: Execute Live Data Log
       env:
         THINGSPEAK_WRITE_KEY: ${{ secrets.THINGSPEAK_WRITE_KEY }}
-        TZ: Asia/Singapore  # 💡 This forces Python's datetime to use Singapore Time
+        TZ: Asia/Singapore
       run: python scraper.py
