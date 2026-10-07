@@ -3,7 +3,8 @@ import datetime
 import os
 import requests
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth  # 💡 Corrected native stealth module import
+# 💡 Correct module reference format to avoid 'module object is not callable' error:
+from playwright_stealth.playwright_stealth import stealth_sync
 
 TARGET_GYM = "Hougang ActiveSG Gym"
 URL = "https://activesg.gov.sg"
@@ -58,8 +59,8 @@ def log_capacity():
             
             page = context.new_page()
             
-            # 💡 Correct invocation format to apply stealth hooks seamlessly
-            stealth(page)
+            # 💡 Use stealth_sync to successfully strip out automated system properties
+            stealth_sync(page)
             
             print("Navigating to ActiveSG...")
             page.goto(URL, timeout=45000)
@@ -91,7 +92,7 @@ def log_capacity():
                         if "%" in check_text:
                             digits = [int(s) for s in check_text.replace('%', ' ').split() if s.isdigit()]
                             if digits:
-                                capacity_num = digits[0]
+                                capacity_num = digits
                                 capacity_str = f"{capacity_num}%"
                                 break
                         elif "Closed" in check_text:
