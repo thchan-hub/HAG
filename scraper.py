@@ -2,13 +2,13 @@ import time
 import datetime
 import os
 import re
-import requests  # Added for handling the ThingSpeak API calls
+import requests
 from playwright.sync_api import sync_playwright
 
 TARGET_GYM = "Hougang ActiveSG Gym"
 URL = "https://activesg.gov.sg"
 
-# 💡 Configurations: Safely reads your secret API key from the GitHub cloud environment
+# Configurations: Safely reads your secret API key from the GitHub cloud environment
 THINGSPEAK_WRITE_KEY = os.environ.get("THINGSPEAK_WRITE_KEY")
 
 def push_to_thingspeak(value):
@@ -45,33 +45,44 @@ def log_capacity():
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             
-            # Navigate to the page and wait for full client-side React hydration to complete
+            # Navigate to the page and wait for full hydration to complete
             page.goto(URL, timeout=30000)
-            page.wait_for_timeout(5000) # Give it 5 seconds to load text parameters fully
+            page.wait_for_timeout(7000) # Increased to 7 seconds to let heavy text load completely
             
             # Extract the raw rendered text content from the browser viewport
             body_text = page.locator("body").inner_text()
             browser.close()
             
-            # Clean and compress the text array lines
-            clean_text = ' '.join(body_text.split())
-            
-            # Match pattern searching for: "Hougang ActiveSG Gym [any text] XX%"
-            pattern = re.compile(rf"{re.escape(TARGET_GYM)}[\s\S]*?(\d{{1,3}})\s*%", re.IGNORECASE)
-            match = pattern.search(clean_text)
+            # 💡 DEBUG: Split text into clean lines to inspect in the GitHub Action logs
+            lines = [line.strip() for line in body_text.split('\n') if line.strip()]
+            print("--- BEGIN PAGE SNAPSHOT LOG ---")
+            for idx, line in enumerate(lines[:100]): # Print the first 100 loaded text fragments
+                print(f"[{idx}] {line}")
+            print("--- END PAGE SNAPSHOT LOG ---")
             
             capacity_num = None
             capacity_str = "N/A"
             
-            if match:
-                capacity_num = int(match.group(1))
-                capacity_str = f"{capacity_num}%"
-            else:
-                # Broad fallback sweep if naming format orders shuffle sequences
-                fallback_match = re.search(r"Hougang[\s\S]{1,100}?(\d{1,3})\s*%", clean_text, re.IGNORECASE)
-                if fallback_match:
-                    capacity_num = int(fallback_match.group(1))
-                    capacity_str = f"{capacity_num}%"
+            # 💡 Iterative Matching Logic: Locate the gym name line and search adjacent rows
+            for i, line in enumerate(lines):
+                if "Hougang" in line and "Gym" in line:
+                    print(f"Target found at line block [{i}]: {line}")
+                    
+                    # Look at this line and the next 2 lines down for the percentage indicator
+                    for search_idx in range(i, min(i + 3, len(lines))):
+                        check_text = lines[search_idx]
+                        if "%" in check_text:
+                            digits = [int(s) for s in check_text.replace('%', ' ').split() if s.isdigit()]
+                            if digits:
+                                capacity_num = digits[0]
+                                capacity_str = f"{capacity_num}%"
+                                break
+                        elif "Closed" in check_text:
+                            capacity_num = 0
+                            capacity_str = "0% (Closed)"
+                            break
+                    if capacity_num is not None:
+                        break
 
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_entry = f"{timestamp},{capacity_str}\n"
@@ -85,7 +96,7 @@ def log_capacity():
                 
             print(f"Logged locally: {timestamp} -> {TARGET_GYM}: {capacity_str}")
             
-            # 💡 Trigger the ThingSpeak upload if a valid number was successfully parsed
+            # Trigger the ThingSpeak upload if a valid number was successfully parsed
             if capacity_num is not None:
                 push_to_thingspeak(capacity_num)
             else:
@@ -94,17 +105,7 @@ def log_capacity():
         except Exception as e:
             print(f"Automated browser event error: {str(e)}")
 
-# 💡 Note for Cloud Execution:
-# When running on GitHub Actions, the workflow system runs the script file once per cron cycle.
-# The "while True" infinite loop structure is bypassed in the cloud to avoid dragging system resources.
 if __name__ == "__main__":
-    # If running in GitHub Actions cloud, run once and finish.
     if os.environ.get("GITHUB_ACTIONS") == "true":
         print(f"🚀 ActiveSG Browser Tracker triggered via GitHub Cloud for {TARGET_GYM}...")
         log_capacity()
-    else:
-        # Loop backup execution layout if you decide to test run it locally on your computer instead
-        print(f"🚀 ActiveSG Local Continuous Loop Tracker engaged for {TARGET_GYM}...")
-        while True:
-            log_capacity()
-            time.sleep(10 * 60) # Runs every 10 minutes locally
